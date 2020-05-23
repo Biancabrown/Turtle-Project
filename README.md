@@ -1,4 +1,4 @@
 # Turtle-Project
 
-[![Binder](https://mybinder.org/badge_logo.svg)](https://gesis.mybinder.org/binder/v2/gh/Biancabrown/Turtle-Project/1bc1a1905651a41e2c3bab9b9c9fefdbac9ca743)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://gesis.mybinder.org/binder/v2/gh/Biancabrown/Turtle-Project/1bc1a1905651a41e2c3bab9b9c9fefdbac9ca743/rstudio)
 
