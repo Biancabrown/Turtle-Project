@@ -1,0 +1,222 @@
+---
+title: "Load data: 10 example "populations" in New England"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(raster)
+library(rgeos)
+library(fasterize)
+library(gdistance)
+
+```{r import samples}
+
+loc<-read.csv("~/Dropbox/Terrapins/ExampleRs/Example.csv", header=T)
+
+#####
+#Loading the map using the strategy below will download a file onto your computer: setting the working directory (a folder) will help you find it if you need.
+#####
+setwd("~/Dropbox/Terrapins/ExampleRs")
+```
+```{r Download a map for the USA: this is ~12 MB}
+#####
+
+nestates<-c("Massachusetts", "Connecticut","Rhode Island", "New York", "New Jersey")
+us<-getData("GADM", country="USA", level=1)	#this is probably more detailed than we need for this analysis; the wrld_simpl map would probably make this more efficient
+ne<-us[match(toupper(nestates),toupper(us$NAME_1)),] #subsetting the big map of the US to just the NJ-New England coastal states
+
+# plot and overlay points. note that this takes a long time because there is so much (unnecessary) detail along the coasts. 
+asp=0.7
+plot(ne, asp=asp)
+
+# reduce resolution along the coast to make plotting faster and simpler; tolerance can be increased/decreased as needed
+ne2<-gSimplify(ne, tol=0.05, topologyPreserve=T)
+plot(ne2, asp=asp)
+
+#add points representing the populations to either of the maps above
+head(loc)
+points(cbind(loc$Lon, loc$Lat), col="blue", cex=1.5, pch=16)
+```
+
+```{r calculate 'as the crow flies distance}
+#####
+#Part 1: calculate 'as the crow flies distance'; the longlat option uses great circle rather than Euclidean distance. Note that this doesn't actually require any of the maps we loaded above, but eyeballing the km between populations on the map gives some confidence that the matrix generated is accurate.
+#####
+crow<-spDists(cbind(loc$Lon, loc$Lat), longlat=TRUE)
+crow
+```
+```{r set up maps to calculate least cost distance}
+#####
+#Part 2: set up maps to calculate least cost distance
+#####
+#turn the SpatialPolygonsDataFrame object ne into a gridded raster for least cost analyses
+template<-raster(nrow=1000, ncol=1000) #1000x1000 grid for the region (can add resolution for final draft)
+crs(template)<-crs(ne)
+extent(template)<-extent(ne)
+extent(template)[2]<--69 #add an oceanic buffer around the cape cod border by rounding down to degree -69
+```
+```{r mask land}
+#mask land
+nemask<-rasterize(ne, template)
+neras<-is.na(nemask)
+
+#assign costs to crossing land
+neras[neras==1]<-9999 	#make land very difficult to cross but not 'impossible' by resetting the water from 1 to 9999
+neras[neras==0]<-1 		#make land very difficult to cross but not 'impossible' by resetting the land 0 to 1
+```
+
+```{r plot}
+#plot
+plot(neras) 
+points(cbind(loc$Lon, loc$Lat), col="blue", cex=1.5, pch=16)
+
+#transform population points into a SpatialPoints object
+pts<-SpatialPoints(cbind(loc$Lon, loc$Lat))
+
+#transform the raster into a transition matrix: this is a slow step (1-2 min on my laptop)
+r<-transition(neras, mean, directions=8)
+r<-geoCorrection(r, "c")
+```
+
+```{r calculate least cost path for populations 1 and 5}
+#####
+#calculate least cost path for populations 1 and 5 so we can have an example of how to draw lines and plot the line show... later we will do this for all pairwise combinations of populations
+#####
+lcdist<-shortestPath(r, pts[1,], pts[5,], output="SpatialLines")
+plot(neras) 
+points(cbind(loc$Lon, loc$Lat), col="blue", cex=1.5, pch=16)
+text(x=loc$Lon, y=loc$Lat, seq(1,nrow(loc)), col="yellow")
+plot(lcdist, add=T)
+SpatialLinesLengths(lcdist, longlat=T) #measures length of the line drawn
+```
+
+```{r calculate and draw all pairwise paths}
+#####
+#calculate and draw all pairwise paths
+#####
+
+lcdistlist<-vector("list", length(which(lower.tri(crow)==T)))
+lcdistlist
+
+comb<-t(combn(seq(1,nrow(loc)), 2))
+
+#this loop will take a while because it has to calculate least cost for all pairs of points (1-2 min on my laptop)
+for(i in 1:nrow(comb)){
+	lcdistlist[[i]]<-shortestPath(r, pts[comb[i,1]], pts[comb[i,2]], output="SpatialLines")
+}
+
+#this loop draws all the lines on the map; if you've already closed the map, go back and replot the most recent one above before running this loop
+for(i in 1:nrow(comb)){
+	plot(lcdistlist[[i]], add=T)
+}
+
+#this loop extracts the lengths and stores them in a new matrix so you can make numeric comparisons
+lcdistmat<-matrix(0, nrow=nrow(loc), ncol=nrow(loc))
+for(i in 1:nrow(comb)){
+	lcdistmat[comb[i,2],comb[i,1]]<-SpatialLinesLengths(lcdistlist[[i]], longlat=T)
+}
+```
+
+```{r Plot and summarize}
+#####
+#Plot and summarize the comparison of crow-flies distance vs least cost distance based on our model of costs
+#####
+plot(lcdistmat[lower.tri(lcdistmat)]~ crow[lower.tri(crow)], pch=16)
+abline(a=0, b=1) # plot a 1:1 line for comparison
+
+#some summary stats for the comparisons
+distdiff<-lcdistmat[lower.tri(lcdistmat)] - crow[lower.tri(crow)]
+hist(distdiff)
+median(distdiff) #average added distance to go around land 
+range(distdiff)	#range of added distances to go around land
+
+```
+
+```{r Calculate least cost path based on buffer around coastline}
+#####
+#Part 3: Calculate least cost path based on buffer around coastline -- permitting travel near coast but not out at sea; note that this part will follow a very similar logic and flow to Part 2...
+#####
+
+#rasterize coast
+nemask<-rasterize(ne, template)
+necoast<-is.na(nemask)
+necoast[necoast==0]<-99
+necoast[necoast==1]<-NA
+plot(necoast)
+
+```
+
+```{r Calculate least cost path based on buffer around coastline}
+
+#compute distances to edges, which can take a while, but it works: go away and come back while it runs (took >>2 min on my laptop)
+d<-distance(necoast, doEdge=TRUE)
+
+#create a 1-km buffer along coast; the 1-km value is arbitrary, but seemed ok to me for now.
+dcoast<-d
+dcoast@data@values<-dcoast@data@values/1000 #convert from m to km
+dcoast[dcoast>1]<-0 				#offshore impossible to traverse
+dcoast[dcoast>0 & dcoast<=1]<-9999 	#near coast easy to traverse 9999
+dcoast[dcoast<=1]<-1 	#offshore is difficult but not impossible to traverse, just like land
+
+```
+
+```{r plot the near-coast buffer zone}
+
+#plot the near-coast buffer zone
+plot(dcoast)
+points(cbind(loc$Lon, loc$Lat), col="blue", cex=1.5, pch=16)
+
+
+
+#transform the raster into a transition matrix
+r_coast<-transition(dcoast, mean, directions=8)
+r_coast<-geoCorrection(r_coast, "c")
+```
+
+```{r calculate least cost path}
+#####
+#calculate least cost path between sites using coastal buffer as the corridor
+#####
+coastdistlist<-vector("list", length(which(lower.tri(crow)==T)))
+coastdistlist
+
+comb<-t(combn(seq(1,nrow(loc)), 2))
+
+#this loop will take a while because it has to calculate least cost for all pairs of points (1-2 min on my laptop)
+for(i in 1:nrow(comb)){
+	coastdistlist[[i]]<-shortestPath(r_coast, pts[comb[i,1]], pts[comb[i,2]], output="SpatialLines")
+}
+
+#this loop draws all the lines (make sure you still have the most recent map plot open)
+for(i in 1:nrow(comb)){
+	plot(coastdistlist[[i]], add=T)
+}
+
+#this loop extracts the lengths and stores them in a new matrix to enable comparisons
+coastdistmat<-matrix(0, nrow=nrow(loc), ncol=nrow(loc))
+for(i in 1:nrow(comb)){
+	coastdistmat[comb[i,2],comb[i,1]]<-SpatialLinesLengths(coastdistlist[[i]], longlat=T)
+}
+```
+
+```{r Plot and summarize}
+
+#####
+#Plot and summarize the comparison of crow-flies distance vs least cost distance based on our model of costs to leaving the coastal buffer zone
+#####
+plot(coastdistmat[lower.tri(coastdistmat)]~ crow[lower.tri(crow)], pch=16)
+abline(a=0, b=1) # plot a 1:1 line for comparison
+
+#some summary stats for the comparisons
+distdiff<-coastdistmat[lower.tri(coastdistmat)] - crow[lower.tri(crow)]
+hist(distdiff)
+median(distdiff) #average added distance to go around land 
+range(distdiff)	#range of added distances to go around land
+
+#####
+#Note that a similar logic could be used to enable some degree of movement across land: e.g., by inverting some of the steps above, one could calculate a distance to the coast on land and allow turtles to traverse some distance inland... or one could incorporate meters above sea level into some cost function...
+#####
+```
