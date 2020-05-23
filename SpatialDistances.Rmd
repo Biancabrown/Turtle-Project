@@ -14,7 +14,7 @@ library(fasterize)
 library(gdistance)
 ```
 
-```{r import samples}
+```{r}
 
 loc<-read.csv("~/Dropbox/Terrapins/ExampleRs/Example.csv", header=T)
 
