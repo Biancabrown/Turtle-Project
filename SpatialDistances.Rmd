@@ -11,6 +11,7 @@ library(raster)
 library(rgeos)
 library(fasterize)
 library(gdistance)
+```
 
 ```{r import samples}
 
