@@ -6,6 +6,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
 ```{r}
 library(raster)
 library(rgeos)
@@ -22,7 +23,8 @@ loc<-read.csv("~/Dropbox/Terrapins/ExampleRs/Example.csv", header=T)
 #####
 setwd("~/Dropbox/Terrapins/ExampleRs")
 ```
-```{r Download a map for the USA: this is ~12 MB}
+
+```{r}
 #####
 
 nestates<-c("Massachusetts", "Connecticut","Rhode Island", "New York", "New Jersey")
@@ -42,14 +44,15 @@ head(loc)
 points(cbind(loc$Lon, loc$Lat), col="blue", cex=1.5, pch=16)
 ```
 
-```{r calculate 'as the crow flies distance}
+```{r}
 #####
 #Part 1: calculate 'as the crow flies distance'; the longlat option uses great circle rather than Euclidean distance. Note that this doesn't actually require any of the maps we loaded above, but eyeballing the km between populations on the map gives some confidence that the matrix generated is accurate.
 #####
 crow<-spDists(cbind(loc$Lon, loc$Lat), longlat=TRUE)
 crow
 ```
-```{r set up maps to calculate least cost distance}
+
+```{r}
 #####
 #Part 2: set up maps to calculate least cost distance
 #####
@@ -59,7 +62,7 @@ crs(template)<-crs(ne)
 extent(template)<-extent(ne)
 extent(template)[2]<--69 #add an oceanic buffer around the cape cod border by rounding down to degree -69
 ```
-```{r mask land}
+```{r}
 #mask land
 nemask<-rasterize(ne, template)
 neras<-is.na(nemask)
@@ -69,7 +72,7 @@ neras[neras==1]<-9999 	#make land very difficult to cross but not 'impossible' b
 neras[neras==0]<-1 		#make land very difficult to cross but not 'impossible' by resetting the land 0 to 1
 ```
 
-```{r plot}
+```{r}
 #plot
 plot(neras) 
 points(cbind(loc$Lon, loc$Lat), col="blue", cex=1.5, pch=16)
@@ -82,7 +85,7 @@ r<-transition(neras, mean, directions=8)
 r<-geoCorrection(r, "c")
 ```
 
-```{r calculate least cost path for populations 1 and 5}
+```{r}
 #####
 #calculate least cost path for populations 1 and 5 so we can have an example of how to draw lines and plot the line show... later we will do this for all pairwise combinations of populations
 #####
@@ -94,7 +97,7 @@ plot(lcdist, add=T)
 SpatialLinesLengths(lcdist, longlat=T) #measures length of the line drawn
 ```
 
-```{r calculate and draw all pairwise paths}
+```{r}
 #####
 #calculate and draw all pairwise paths
 #####
@@ -121,7 +124,7 @@ for(i in 1:nrow(comb)){
 }
 ```
 
-```{r Plot and summarize}
+```{r}
 #####
 #Plot and summarize the comparison of crow-flies distance vs least cost distance based on our model of costs
 #####
@@ -136,7 +139,7 @@ range(distdiff)	#range of added distances to go around land
 
 ```
 
-```{r Calculate least cost path based on buffer around coastline}
+```{r}
 #####
 #Part 3: Calculate least cost path based on buffer around coastline -- permitting travel near coast but not out at sea; note that this part will follow a very similar logic and flow to Part 2...
 #####
@@ -150,7 +153,7 @@ plot(necoast)
 
 ```
 
-```{r Calculate least cost path based on buffer around coastline}
+```{r}
 
 #compute distances to edges, which can take a while, but it works: go away and come back while it runs (took >>2 min on my laptop)
 d<-distance(necoast, doEdge=TRUE)
@@ -164,7 +167,7 @@ dcoast[dcoast<=1]<-1 	#offshore is difficult but not impossible to traverse, jus
 
 ```
 
-```{r plot the near-coast buffer zone}
+```{r}
 
 #plot the near-coast buffer zone
 plot(dcoast)
@@ -177,7 +180,7 @@ r_coast<-transition(dcoast, mean, directions=8)
 r_coast<-geoCorrection(r_coast, "c")
 ```
 
-```{r calculate least cost path}
+```{r}
 #####
 #calculate least cost path between sites using coastal buffer as the corridor
 #####
@@ -203,7 +206,7 @@ for(i in 1:nrow(comb)){
 }
 ```
 
-```{r Plot and summarize}
+```{r}
 
 #####
 #Plot and summarize the comparison of crow-flies distance vs least cost distance based on our model of costs to leaving the coastal buffer zone
